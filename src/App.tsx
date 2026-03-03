@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Globe, Sparkles, ArrowRight, Loader2, Bot, User, Info } from 'lucide-react';
+import { Search, Globe, Sparkles, ArrowRight, Loader2, Bot, User, Info, LogOut, CreditCard } from 'lucide-react';
 import Markdown from 'react-markdown';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 type Message = {
   role: 'user' | 'assistant';
@@ -19,20 +16,101 @@ export default function App() {
   const [summary, setSummary] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Auth state
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [user, setUser] = useState<any>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    if (token) {
+      fetchUser();
+    }
+  }, [token]);
+
+  const fetchUser = async () => {
+    try {
+      const res = await fetch('/api/user/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setUser(await res.json());
+      } else {
+        logout();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setToken(data.token);
+        localStorage.setItem('token', data.token);
+      } else {
+        setAuthError(data.error || 'Authentication failed');
+      }
+    } catch (e) {
+      setAuthError('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+  };
+
+  const handleUpgrade = async () => {
+    try {
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const analyzeWebsite = async () => {
-    if (!url) return;
+    if (!url || !token) return;
     setLoading(true);
     setSummary('');
     setMessages([]);
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Please provide a comprehensive summary of this website: ${url}. What is it about? What are its main features or offerings? Who is the target audience? Keep it concise and easy to read.`,
-        config: {
-          tools: [{ urlContext: {} }, { googleSearch: {} }]
-        }
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ url })
       });
-      setSummary(response.text || 'No summary available.');
+      const data = await res.json();
+      if (res.ok) {
+        setSummary(data.summary);
+        fetchUser(); // Update usage
+      } else {
+        setSummary(data.error || 'Error analyzing the website.');
+      }
     } catch (error) {
       console.error(error);
       setSummary('Error analyzing the website. Please check the URL or try again later.');
@@ -43,7 +121,7 @@ export default function App() {
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || !url) return;
+    if (!query.trim() || !url || !token) return;
     
     const userMessage = query;
     setQuery('');
@@ -51,18 +129,22 @@ export default function App() {
     setLoading(true);
     
     try {
-      const chatHistory = messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-      const prompt = `Context: The user is asking about the website ${url}.\n\nPrevious conversation:\n${chatHistory}\n\nUser's new question: ${userMessage}\n\nPlease answer the user's question based on the website context.`;
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          tools: [{ urlContext: {} }, { googleSearch: {} }]
-        }
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ url, query: userMessage, history: messages })
       });
+      const data = await res.json();
       
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text || 'No response available.' }]);
+      if (res.ok) {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+        fetchUser(); // Update usage
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.error || 'Error getting an answer.' }]);
+      }
     } catch (error) {
       console.error(error);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error getting an answer. Please try again.' }]);
@@ -75,20 +157,92 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, summary, loading]);
 
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4 font-sans">
+        <div className="w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-neutral-200 p-6">
+          <div className="flex items-center gap-3 mb-6 justify-center">
+            <div className="bg-indigo-600 p-2 rounded-xl">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="font-bold text-xl tracking-tight text-neutral-900">SiteSight AI</h1>
+          </div>
+          
+          <h2 className="text-center font-medium text-neutral-600 mb-6">
+            {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+          </h2>
+
+          {authError && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 text-center">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAuth} className="flex flex-col gap-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Email</label>
+              <input 
+                type="email" 
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Password</label>
+              <input 
+                type="password" 
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                required
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition-colors flex justify-center items-center"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === 'login' ? 'Sign In' : 'Sign Up')}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-neutral-500">
+            {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
+            <button 
+              onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+              className="text-indigo-600 font-medium hover:underline"
+            >
+              {authMode === 'login' ? 'Sign up' : 'Sign in'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4 font-sans">
       {/* Extension Popup Container */}
       <div className="w-[400px] h-[600px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-neutral-200">
         
         {/* Header */}
-        <div className="bg-indigo-600 text-white p-4 flex items-center gap-3 shrink-0 shadow-sm relative z-10">
-          <div className="bg-white/20 p-1.5 rounded-lg">
-            <Sparkles className="w-5 h-5 text-indigo-50" />
+        <div className="bg-indigo-600 text-white p-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-1.5 rounded-lg">
+              <Sparkles className="w-5 h-5 text-indigo-50" />
+            </div>
+            <div>
+              <h1 className="font-semibold text-base tracking-tight leading-tight">SiteSight AI</h1>
+              <p className="text-indigo-200 text-xs">
+                {user?.plan === 'pro' ? 'Pro Plan' : `Free Plan (${10 - (user?.usageToday || 0)} left)`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-semibold text-base tracking-tight leading-tight">SiteSight AI</h1>
-            <p className="text-indigo-200 text-xs">Your intelligent browsing assistant</p>
-          </div>
+          <button onClick={logout} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Sign out">
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
         
         {/* URL Input (Simulated Active Tab) */}
@@ -129,6 +283,16 @@ export default function App() {
                 <h3 className="text-neutral-700 font-medium mb-1">Ready to explore</h3>
                 <p className="text-sm">Enter a URL and click Analyze to get AI insights about the current website.</p>
               </div>
+              
+              {user?.plan === 'free' && (
+                <button 
+                  onClick={handleUpgrade}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-sm"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Upgrade to Pro ($10/mo)
+                </button>
+              )}
             </div>
           )}
           
