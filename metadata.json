@@ -1,0 +1,5 @@
+{
+  "name": "SiteSight AI",
+  "description": "A Chrome extension prototype that uses AI to analyze and answer questions about the current website.",
+  "requestFramePermissions": []
+}
