@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "SiteSight AI",
+  "version": "1.0",
+  "description": "AI that analyzes the current website.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "SiteSight AI"
+  }
+}

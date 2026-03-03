@@ -24,6 +24,17 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
+  // Fetch active tab URL if running as a Chrome extension
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0] && tabs[0].url) {
+          setUrl(tabs[0].url);
+        }
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (token) {
       fetchUser();
