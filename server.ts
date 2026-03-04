@@ -109,7 +109,9 @@ app.use(express.json());
 app.use('/api/', apiLimiter);
 
 // Health check route
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, uptime: process.uptime() });
+});
 
 // Auth Middleware
 const authenticateToken = (req: any, res: any, next: any) => {
