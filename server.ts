@@ -13,7 +13,7 @@ import rateLimit from 'express-rate-limit';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-dev';
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_123';
@@ -107,6 +107,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 app.use(express.json());
 app.use('/api/', apiLimiter);
+
+// Health check route
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // Auth Middleware
 const authenticateToken = (req: any, res: any, next: any) => {

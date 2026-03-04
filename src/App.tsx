@@ -8,6 +8,8 @@ type Message = {
   content: string;
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export default function App() {
   const [url, setUrl] = useState('https://www.anthropic.com');
   const [query, setQuery] = useState('');
@@ -43,7 +45,7 @@ export default function App() {
 
   const fetchUser = async () => {
     try {
-      const res = await fetch('/api/user/me', {
+      const res = await fetch(`${API_BASE}/api/user/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -61,7 +63,7 @@ export default function App() {
     setAuthError('');
     setLoading(true);
     try {
-      const res = await fetch(`/api/auth/${authMode}`, {
+      const res = await fetch(`${API_BASE}/api/auth/${authMode}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -88,7 +90,7 @@ export default function App() {
 
   const handleUpgrade = async () => {
     try {
-      const res = await fetch('/api/stripe/create-checkout-session', {
+      const res = await fetch(`${API_BASE}/api/stripe/create-checkout-session`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -107,7 +109,7 @@ export default function App() {
     setSummary('');
     setMessages([]);
     try {
-      const res = await fetch('/api/analyze', {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -140,7 +142,7 @@ export default function App() {
     setLoading(true);
     
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
