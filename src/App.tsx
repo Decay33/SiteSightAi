@@ -26,14 +26,23 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // Fetch active tab URL if running as a Chrome extension
+  // Fetch active tab URL and token if running as a Chrome extension
   useEffect(() => {
-    if (typeof chrome !== 'undefined' && chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0] && tabs[0].url) {
-          setUrl(tabs[0].url);
-        }
-      });
+    if (typeof chrome !== 'undefined') {
+      if (chrome.tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0] && tabs[0].url) {
+            setUrl(tabs[0].url);
+          }
+        });
+      }
+      if (chrome.storage) {
+        chrome.storage.local.get(['token'], (result) => {
+          if (result.token) {
+            setToken(result.token as string);
+          }
+        });
+      }
     }
   }, []);
 
@@ -72,6 +81,9 @@ export default function App() {
       if (res.ok) {
         setToken(data.token);
         localStorage.setItem('token', data.token);
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          chrome.storage.local.set({ token: data.token });
+        }
       } else {
         setAuthError(data.error || 'Authentication failed');
       }
@@ -86,6 +98,9 @@ export default function App() {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.remove('token');
+    }
   };
 
   const handleUpgrade = async () => {
@@ -117,6 +132,12 @@ export default function App() {
         },
         body: JSON.stringify({ url })
       });
+      
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        return;
+      }
+
       const data = await res.json();
       if (res.ok) {
         setSummary(data.summary);
@@ -150,6 +171,12 @@ export default function App() {
         },
         body: JSON.stringify({ url, query: userMessage, history: messages })
       });
+
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        return;
+      }
+
       const data = await res.json();
       
       if (res.ok) {
