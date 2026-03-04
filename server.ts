@@ -289,23 +289,18 @@ app.post('/api/stripe/create-checkout-session', authenticateToken, async (req: a
     const stmt = db.prepare('SELECT email FROM users WHERE id = ?');
     const user = stmt.get(req.user.id) as any;
 
+    const priceId = process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      return res.status(500).json({ error: "Missing STRIPE_PRICE_ID environment variable" });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
       customer_email: user.email,
       line_items: [
         {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: 'SiteSight AI Pro',
-              description: 'Unlimited website analysis and chat',
-            },
-            unit_amount: 1000, // $10.00
-            recurring: {
-              interval: 'month',
-            },
-          },
+          price: priceId,
           quantity: 1,
         },
       ],
