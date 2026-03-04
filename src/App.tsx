@@ -111,7 +111,13 @@ export default function App() {
       });
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        // In a Chrome extension popup, window.location.href will close the popup.
+        // Opening in a new tab is required for the user to complete checkout.
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+          chrome.tabs.create({ url: data.url });
+        } else {
+          window.open(data.url, '_blank');
+        }
       }
     } catch (e) {
       console.error(e);
